@@ -1,0 +1,12 @@
+apiVersion: enterprise.gloo.solo.io/v1
+kind: AuthConfig
+metadata:
+  name: passthrough-auth
+  namespace: gloo-system
+spec:
+  configs:
+  - passThroughAuth:
+      grpc:
+        # This is now pointing to the sidecar that orignate tls and route it to the istio gateway (that serves the grpc passthrough)
+        address: 127.0.0.1:9001
+        connectionTimeout: 3s

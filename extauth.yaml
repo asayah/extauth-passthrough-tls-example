@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    meta.helm.sh/release-name: gloo
+    meta.helm.sh/release-namespace: gloo-system
+  creationTimestamp: "2022-11-03T23:04:12Z"
+  generation: 1
+  labels:
+    app: gloo
+    app.kubernetes.io/managed-by: Helm
+    gloo: extauth
+  name: extauth
+  namespace: gloo-system
+  resourceVersion: "11385"
+  uid: d7a1ed3d-c587-4d8b-80b9-e9059728706c
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      gloo: extauth
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9091"
+        prometheus.io/scrape: "true"
+      creationTimestamp: null
+      labels:
+        gloo: extauth
+    spec:
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  gloo: gateway-proxy
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: SERVICE_NAME
+          value: ext-auth
+        - name: GLOO_ADDRESS
+          value: gloo:9977
+        - name: SIGNING_KEY
+          valueFrom:
+            secretKeyRef:
+              key: signing-key
+              name: extauth-signing-key
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: redis
+        - name: SERVER_PORT
+          value: "8083"
+        - name: USER_ID_HEADER
+          value: x-user-id
+        - name: START_STATS_SERVER
+          value: "true"
+        - name: HEALTH_HTTP_PORT
+          value: "8082"
+        - name: HEALTH_HTTP_PATH
+          value: /healthcheck
+        image: quay.io/solo-io/extauth-ee:1.12.33@sha256:325d8aaad672e867d6828f14caf0d023d317c4bd0c4ce757ff22dfd54e9bd32d
+        imagePullPolicy: IfNotPresent
+        name: extauth
+        readinessProbe:
+          failureThreshold: 2
+          httpGet:
+            path: /healthcheck
+            port: 8082
+            scheme: HTTP
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+    
+    
+    #Sidecar to orignate tls for the passthrough auth
+    
+      - env:
+        - name: ENVOY_SIDECAR
+          value: "true"
+        image: quay.io/solo-io/gloo-ee-envoy-wrapper:1.12.33@sha256:79089ccd26247506628e254081201d31f4b3b9664355ade377185b7115ac5abd
+        imagePullPolicy: IfNotPresent
+        name: envoy-sidecar
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/envoy
+          name: sidecar-config  
+      
+      
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 10101
+        runAsNonRoot: true
+        runAsUser: 10101
+      serviceAccount: extauth
+      serviceAccountName: extauth
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: sidecar-config
+        name: sidecar-config
